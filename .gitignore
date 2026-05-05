@@ -1,0 +1,43 @@
+# Large sequencing data
+*.pod5
+*.fast5
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.bam
+*.sam
+*.cram
+*.bai
+*.crai
+
+# Reference genomes and indexes
+data/
+*.fa
+*.fasta
+*.fna
+*.fa.fai
+*.fasta.fai
+*.mmi
+
+# Results and logs
+results/
+logs/
+*.log
+*.out
+*.err
+
+# Compressed/tabix outputs
+*.bed.gz
+*.tbi
+
+# Local environment
+.env
+.venv/
+venv/
+__pycache__/
+.DS_Store
+
+# Keep directory placeholders
+!examples/
+!examples/README.md

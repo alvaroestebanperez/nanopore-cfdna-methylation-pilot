@@ -5,6 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32gb
 #SBATCH --time=02:00:00
+##SBATCH --constraint=cal
 #SBATCH --constraint=dgx
 #SBATCH --gres=gpu:1
 #SBATCH --error=logs/dorado_basecall.%J.err
@@ -14,18 +15,51 @@
 ##SBATCH --array=1-100
 
 # ---------------------------------------------------------------------------
-module load dorado/0.8.1
-module load samtools/1.17 # Confirm that samtools is available for indexing the BAM file after basecalling
+
+export PATH="${HOME}/projects/dorado-1.4.0-linux-x64/bin:${PATH}"
+export PATH="${HOME}/projects/samtools-1.23.1/bin:${PATH}"
+
+set -euo pipefail
+
 MODEL="${HOME}/fscratch/nanopore_pilot/dorado_models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0_5mCG_5hmCG@v2"
-# Confirm that the model file exists at the specified path. Adjust if necessary.
+POD5="${HOME}/fscratch/nanopore_pilot/data/pod5/5mC_rep1.pod5"
+REF="${HOME}/fscratch/nanopore_pilot/data/ref/all_5mers.fa"
+BAM_REF="${HOME}/fscratch/nanopore_pilot/data/bam/5mC_rep1.bam"
+RESULTS="${HOME}/fscratch/nanopore_pilot/results"
 
-dorado basecall --model "${MODEL}" \
-    --input "${DATA}/pod5/5mC_rep1.pod5" \
-    --output "${DATA}/bam/5mC_rep1.dorado.bam" \
-    --modified-bases 5mC_5hmCG \
-    --reference "${DATA}/ref" \
-    2> logs/dorado_basecall.%J.log \
-    | samtools sort -@ "$SLURM_CPUS_PER_TASK" -o "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
+mkdir -p "${RESULTS}/bam" "${RESULTS}/qc"
 
-    samtools flagstat "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam" > "${RESULTS}/bam/5mC_rep1.dorado.flagstat.txt"
-    samtools flagstat "${DATA}/bam/5mC_rep1.bam" > "${RESULTS}/bam/5mC_rep1.original.flagstat.txt"
+# ---------------------------------------------------------------------------
+# Basecalling + alignment
+
+echo "==> Dorado basecaller"
+time dorado basecaller "${MODEL}" "${POD5}" \
+  --modified-bases 5mCG_5hmCG \
+  --reference "${REF}" \
+  --min-qscore 10 \
+  2> "logs/dorado.${SLURM_JOB_ID}.log" \
+| samtools sort -@ "${SLURM_CPUS_PER_TASK}" \
+  -o "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
+
+echo "==> Index + QC (Track A)"
+samtools index "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
+samtools quickcheck -v "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
+samtools flagstat -@ "${SLURM_CPUS_PER_TASK}" \
+  "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam" \
+  > "${RESULTS}/qc/5mC_rep1.dorado.flagstat.txt"
+
+# ---------------------------------------------------------------------------
+# Compare with pre-basecalled BAM (Track B)
+
+echo "==> QC Track B (reference BAM)"
+samtools flagstat -@ "${SLURM_CPUS_PER_TASK}" \
+  "${BAM_REF}" \
+  > "${RESULTS}/qc/5mC_rep1.original.flagstat.txt"
+
+echo "==> Comparison"
+echo "--- Track A (Dorado) ---"
+cat "${RESULTS}/qc/5mC_rep1.dorado.flagstat.txt"
+echo "--- Track B (ONT pre-basecalled) ---"
+cat "${RESULTS}/qc/5mC_rep1.original.flagstat.txt"
+
+echo "==> Done"

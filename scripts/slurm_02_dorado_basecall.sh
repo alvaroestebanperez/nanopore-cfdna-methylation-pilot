@@ -34,7 +34,6 @@ mkdir -p "${RESULTS}/bam" "${RESULTS}/qc"
 
 echo "==> Dorado basecaller"
 time dorado basecaller "${MODEL}" "${POD5}" \
-  --modified-bases 5mCG_5hmCG \
   --reference "${REF}" \
   --min-qscore 10 \
   2> "logs/dorado.${SLURM_JOB_ID}.log" \

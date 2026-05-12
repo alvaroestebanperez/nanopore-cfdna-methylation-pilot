@@ -38,6 +38,9 @@ venv/
 __pycache__/
 .DS_Store
 
+# Local documentation (not versioned)
+docs/
+
 # Keep directory placeholders
 !examples/
 !examples/README.md

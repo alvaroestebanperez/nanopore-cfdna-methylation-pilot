@@ -6,6 +6,8 @@
 #SBATCH --mem=2gb
 #SBATCH --time=00:30:00
 #SBATCH --constraint=cal
+##SBATCH --constraint=intel
+##SBATCH --constraint=amd
 ##SBATCH --constraint=dgx
 ##SBATCH --gres=gpu:1
 #SBATCH --error=logs/download.%J.err

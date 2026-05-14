@@ -16,8 +16,10 @@
 
 # ---------------------------------------------------------------------------
 
+source /mnt/home/soft/anaconda3/programs/x86_64/anaconda-2020/etc/profile.d/conda.sh
+conda activate nanopore
+
 export PATH="${HOME}/projects/dorado-1.4.0-linux-x64/bin:${PATH}"
-export PATH="${HOME}/projects/samtools-1.23.1/bin:${PATH}"
 
 set -euo pipefail
 

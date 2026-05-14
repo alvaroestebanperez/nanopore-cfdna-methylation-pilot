@@ -13,9 +13,10 @@
 
 # ---------------------------------------------------------------------------
 
-set -euo pipefail
+source /mnt/home/soft/anaconda3/programs/x86_64/anaconda-2020/etc/profile.d/conda.sh
+conda activate nanopore
 
-export PATH="${HOME}/projects/samtools-1.23.1/bin:${PATH}"
+set -euo pipefail
 
 mkdir -p "${HOME}/fscratch/nanopore_pilot/results/bam" \
          "${HOME}/fscratch/nanopore_pilot/results/qc"

@@ -14,39 +14,82 @@
 #SBATCH --mail-type=END,FAIL
 ##SBATCH --array=1-100
 
-# ---------------------------------------------------------------------------
-
-source /mnt/home/soft/anaconda3/programs/x86_64/anaconda-2020/etc/profile.d/conda.sh
-conda activate nanopore
-
-export PATH="${HOME}/projects/dorado-1.4.0-linux-x64/bin:${PATH}"
-
 set -euo pipefail
 
-MODEL="${HOME}/fscratch/nanopore_pilot/dorado_models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0_5mCG_5hmCG@v2"
+# ---------------------------------------------------------------------------
+# Runtime environment
+#
+# Keep samtools inside the conda environment. Loading the cluster samtools
+# module here can make the batch job pick an incompatible libncursesw.
+
+module purge
+module load miniconda/3_py10
+
+eval "$(conda shell.bash hook)"
+conda activate nanopore
+
+export PATH="${CONDA_PREFIX}/bin:${HOME}/projects/dorado-1.4.0-linux-x64/bin:${PATH}"
+export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+echo "==> Runtime environment"
+echo "HOSTNAME=${HOSTNAME:-unknown}"
+echo "CONDA_PREFIX=${CONDA_PREFIX}"
+echo "samtools=$(command -v samtools)"
+samtools --version
+ldd "$(command -v samtools)" | grep ncurses || true
+echo "dorado=$(command -v dorado)"
+dorado --version
+
+# ---------------------------------------------------------------------------
+
+MODEL_ROOT="${HOME}/fscratch/nanopore_pilot/dorado_models"
+MODEL="hac@v5.0.0,5mCG_5hmCG@v2"
 POD5="${HOME}/fscratch/nanopore_pilot/data/pod5/5mC_rep1.pod5"
 REF="${HOME}/fscratch/nanopore_pilot/data/ref/all_5mers.fa"
 BAM_REF="${HOME}/fscratch/nanopore_pilot/data/bam/5mC_rep1.bam"
 RESULTS="${HOME}/fscratch/nanopore_pilot/results"
+UNSORTED_BAM="${RESULTS}/bam/5mC_rep1.dorado.unsorted.bam"
+SORTED_BAM="${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
 
 mkdir -p "${RESULTS}/bam" "${RESULTS}/qc"
+
+if [[ ! -d "${MODEL_ROOT}" ]]; then
+  echo "ERROR: model directory not found: ${MODEL_ROOT}" >&2
+  exit 1
+fi
+
+if ! find "${MODEL_ROOT}" -maxdepth 1 -mindepth 1 -type d -name '*hac@v5.0.0*' | grep -q .; then
+  echo "ERROR: HAC v5.0.0 model not found in ${MODEL_ROOT}" >&2
+  echo "Available model directories in ${MODEL_ROOT}:" >&2
+  find "${MODEL_ROOT}" -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' >&2
+  echo "Download the required model complex before submitting this job:" >&2
+  echo "  dorado download --model ${MODEL} --models-directory ${MODEL_ROOT}" >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Basecalling + alignment
 
 echo "==> Dorado basecaller"
 time dorado basecaller "${MODEL}" "${POD5}" \
+  --models-directory "${MODEL_ROOT}" \
   --reference "${REF}" \
   --min-qscore 10 \
-  2> "logs/dorado.${SLURM_JOB_ID}.log" \
-| samtools sort -@ "${SLURM_CPUS_PER_TASK}" \
-  -o "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
+  > "${UNSORTED_BAM}" \
+  2> "logs/dorado.${SLURM_JOB_ID}.log"
+
+samtools quickcheck -v "${UNSORTED_BAM}"
+
+echo "==> Sort BAM"
+samtools sort -@ "${SLURM_CPUS_PER_TASK}" \
+  -o "${SORTED_BAM}" \
+  "${UNSORTED_BAM}"
 
 echo "==> Index + QC (Track A)"
-samtools index "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
-samtools quickcheck -v "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam"
+samtools index "${SORTED_BAM}"
+samtools quickcheck -v "${SORTED_BAM}"
 samtools flagstat -@ "${SLURM_CPUS_PER_TASK}" \
-  "${RESULTS}/bam/5mC_rep1.dorado.sorted.bam" \
+  "${SORTED_BAM}" \
   > "${RESULTS}/qc/5mC_rep1.dorado.flagstat.txt"
 
 # ---------------------------------------------------------------------------
